@@ -1,16 +1,62 @@
+# SLO của nhóm — Day 13 K4 Observability
+#
+# objective = ngưỡng kỹ thuật của một cửa sổ đo (khớp với threshold trong config/dashboard.yaml).
+# target    = % thời gian trong cửa sổ 28 ngày mà SLI phải nằm trong objective.
+# Phần còn lại của 100% chính là error budget được phép tiêu.
+#
+# Baseline đo ngày 2026-08-11 trên 10 request sạch (không bật incident):
+#   p95 latency = 151 ms | error rate = 0.0 % | cost 10 req = $0.0166 | quality mean = 0.880
+
 service: day13-observability-lab
 window: 28d
+
 slis:
   latency_p95_ms:
     objective: 3000
     target: 99.5
-    note: Replace with your group's target
+    error_budget_pct: 0.5
+    measured_from: data/logs.jsonl -> event=response_sent, field=latency_ms
+    baseline: 151
+    rationale: >-
+      Baseline 151 ms nên objective 3000 ms để dư biên rất rộng cho biến động RAG và
+      LLM. Chọn target 99.5% vì đây là API tương tác trực tiếp với người dùng: cứ 200
+      request thì nhiều nhất 1 request được phép vượt 3 giây.
+
   error_rate_pct:
     objective: 2
     target: 99.0
+    error_budget_pct: 1.0
+    measured_from: data/logs.jsonl -> count(request_failed) / count(request_received)
+    baseline: 0.0
+    rationale: >-
+      Request lỗi là hỏng hoàn toàn với người dùng chứ không chỉ chậm, nhưng lỗi
+      tạm thời của vector store có thể tự hồi phục. Giữ objective 2% và target 99.0%
+      để một sự cố ngắn không lập tức đốt hết error budget.
+
   daily_cost_usd:
     objective: 2.5
     target: 100.0
+    error_budget_pct: 0.0
+    measured_from: data/logs.jsonl -> event=response_sent, sum(cost_usd) theo ngày
+    baseline: 0.0166
+    rationale: >-
+      Đây là ngân sách cứng do lab quy định, không phải chỉ số trải nghiệm, nên
+      target 100% — vượt ngày nào là vi phạm ngày đó. Baseline $0.0166 cho 10 request
+      tương đương khoảng 1500 request/ngày mới chạm trần.
+
   quality_score_avg:
     objective: 0.75
     target: 95.0
+    error_budget_pct: 5.0
+    measured_from: data/logs.jsonl -> event=response_sent, mean(quality_score)
+    baseline: 0.880
+    rationale: >-
+      quality_score là proxy heuristic chứ không phải đánh giá chất lượng thật, nên
+      target lỏng nhất trong bốn SLI (95%). Dùng để phát hiện xu hướng tụt dài hạn —
+      ví dụ prompt version mới kém hơn — chứ không dùng để đánh thức người trực đêm.
+
+# Ghi chú vận hành
+# - Ba SLI đầu có alert tương ứng trong config/alert_rules.yaml.
+# - quality_score_avg cố ý KHÔNG gắn alert paging: tín hiệu nhiễu, review theo tuần.
+# - Khi error budget của một SLI tiêu quá 50% giữa cửa sổ, dừng thay đổi prompt/model
+#   cho tới khi budget hồi lại.

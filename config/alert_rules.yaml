@@ -1,19 +1,49 @@
+# Alert rules — Day 13 K4 Observability
+#
+# Nguyên tắc: mỗi alert mô tả TRIỆU CHỨNG người dùng cảm nhận được hoặc mức tiêu
+# error budget, không nhắc tên thành phần nội bộ (rag_slow, vector store, ...).
+# Nguyên nhân là việc của điều tra; alert chỉ nói "cái gì đang hỏng với người dùng".
+#
+# Nguồn dữ liệu: data/logs.jsonl — cùng nguồn với config/dashboard.yaml.
+# SLI và objective tham chiếu config/slo.yaml.
+
 alerts:
-  - name: TODO_alert_1
-    severity: TODO
-    condition: TODO
+  - name: HighLatencyP95
+    severity: critical
+    sli: latency_p95_ms
+    condition: 'p95(latency_ms where event == "response_sent") > 3000 ms'
+    for: 5m
     type: symptom-based
-    owner: TODO
+    user_impact: >-
+      Người dùng chờ hơn 3 giây mới nhận được câu trả lời; ở mức này phần lớn sẽ
+      bỏ ngang hoặc bấm gửi lại, làm tải tăng thêm.
+    owner: Dashboard, SLO & Alert
     runbook: docs/alerts.md#alert-1
-  - name: TODO_alert_2
-    severity: TODO
-    condition: TODO
+
+  - name: HighErrorRate
+    severity: critical
+    sli: error_rate_pct
+    condition: 'count(event == "request_failed") / count(event == "request_received") * 100 > 2 %'
+    for: 5m
     type: symptom-based
-    owner: TODO
+    user_impact: >-
+      Request trả về 500, người dùng không nhận được câu trả lời nào. Đây là hỏng
+      hoàn toàn chứ không phải suy giảm, nên ưu tiên cao hơn latency khi cả hai cùng nổ.
+    owner: Incident, Report & Demo
     runbook: docs/alerts.md#alert-2
-  - name: TODO_alert_3
-    severity: TODO
-    condition: TODO
+
+  - name: DailyCostBudgetBurn
+    severity: warning
+    sli: daily_cost_usd
+    condition: 'sum(cost_usd where event == "response_sent") trong ngày hiện tại > 2.0 USD'
+    for: 15m
     type: symptom-based
-    owner: TODO
+    user_impact: >-
+      Không ảnh hưởng trực tiếp tới người dùng nhưng chạm 80% ngân sách ngày
+      (2.0/2.5 USD). Cảnh báo sớm ở 80% để còn kịp xử lý trước khi vượt trần cứng.
+    owner: Dashboard, SLO & Alert
     runbook: docs/alerts.md#alert-3
+
+# Cố ý KHÔNG tạo alert paging cho quality_score_avg: đây là proxy heuristic
+# (app/agent.py::_heuristic_quality), dao động theo nội dung câu hỏi nên dễ báo giả.
+# Theo dõi qua panel quality trên dashboard và review theo tuần — xem config/slo.yaml.
