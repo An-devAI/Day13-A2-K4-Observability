@@ -16,7 +16,7 @@
 - Điểm `validate_logs.py`: 100/100 sau khi backup log cũ và sinh lại `data/logs.jsonl` sạch bằng code mới.
 - Tổng số traces: 38 (Langfuse Tracing, ≥10 yêu cầu, gồm các trace từ `load_test.py` và các lần test prompt baseline/candidate/production)
 - Số PII leak còn lại: 0 leak theo `python scripts/validate_logs.py`.
-- Link/đường dẫn dashboard: `submission/evidence/dashboard_baseline.html`, `submission/evidence/dashboard_incident.html`, `submission/evidence/role4_clean_dashboard.html`, `submission/evidence/role4_challenge_dashboard.html`.
+- Link/đường dẫn dashboard: `submission/evidence/dashboard_baseline.html` và `submission/evidence/dashboard_incident.html`, sinh lại bằng `python scripts/build_dashboard.py` `submission/evidence/dashboard_baseline.html`, `submission/evidence/dashboard_incident.html`, `submission/evidence/role4_clean_dashboard.html`, `submission/evidence/role4_challenge_dashboard.html`.
 
 ## 3. Logging và tracing
 
@@ -129,3 +129,78 @@ Với mỗi thành viên, ghi rõ nhiệm vụ và link commit/PR tương ứng.
 | Nguyễn Hải Yến - 2A202601604 | Security & Compliance: hoàn thiện che PII, kiểm tra email/số điện thoại/số thẻ không xuất hiện nguyên văn trong log, tạo evidence prompt versioning trên Langfuse | `5a4f81b` | Biết cần scrub PII trước khi ghi log và dùng prompt label/version để rollback có kiểm soát |
 | Phạm Thành Đạt - 2A202601672 | Metrics & Alerting: hoàn thiện metrics snapshot, dashboard 6 panel, SLO, alert rules, runbook và dashboard evidence baseline/incident | `e26316c`, `b4d0482` | Biết thiết kế alert theo triệu chứng người dùng và dùng SLO/error budget để ưu tiên xử lý |
 | Nguyễn Huy Toàn - 2A202601716 | QA & Incident Analyst: chạy baseline/load test, kiểm `validate_logs.py` và `validate_dashboard.py`, chạy challenge `rag_slow`, đối chiếu Metrics -> Traces -> Logs, sinh evidence Role 4 và hoàn thiện báo cáo incident | Commit `adf1e91` | Biết cách nối Metrics -> Traces -> Logs để chứng minh root cause thay vì chỉ nhìn một log riêng lẻ |
+
+## 8. Bonus
+
+### 8.1 Cost optimization — có before/after
+
+**Cần gạt đã chọn:** trần output token (`MAX_OUTPUT_TOKENS`, mặc định 200), tương đương tham số
+`max_tokens` của một LLM thật. Chọn output chứ không phải input vì bảng giá trong
+[`app/agent.py`](../app/agent.py) tính output $15/1M so với input $3/1M — đắt gấp 5 lần, nên mỗi
+token cắt được ở đầu ra đáng giá gấp 5 lần ở đầu vào. Cài đặt ở
+[`app/mock_llm.py`](../app/mock_llm.py) và [`app/agent.py`](../app/agent.py); giá trị đọc từ env
+nên đổi được mà không sửa code.
+
+Đo bằng [`scripts/cost_benchmark.py`](../scripts/cost_benchmark.py), mỗi lần 30 request (3 vòng
+qua `data/sample_queries.jsonl`), số liệu lấy thẳng từ `cost_usd` trong response body nên chỉ
+thuộc đúng đợt chạy đó. Snapshot: [`evidence/cost_benchmark.json`](evidence/cost_benchmark.json).
+
+| Kịch bản | cost_spike | Trần output | Output tokens | tb/request | **total_cost_usd** |
+|---|---|---|---|---|---|
+| before | bật | không | 16152 | 538.4 | **$0.246159** |
+| after | bật | 200 | 6000 | 200.0 | **$0.092970** |
+| đối chứng | tắt | 200 | 3956 | 131.9 | $0.062310 |
+
+**Tiết kiệm $0.153189 = 62.2%** khi đang có sự cố chi phí.
+
+Dòng đối chứng là phần quan trọng nhất: khi không có sự cố, trung bình chỉ 131.9 token/request,
+nằm dưới trần 200, nên **trần này không hề đụng tới lưu lượng bình thường**. Nó chỉ chặn phần
+đuôi bất thường thay vì bóp đều mọi câu trả lời.
+
+**Giới hạn cần nói rõ:** `FakeLLM` luôn trả về một chuỗi câu trả lời cố định bất kể `output_tokens`
+bằng bao nhiêu, nên ở môi trường lab việc hạ trần chỉ thay đổi *số token được báo cáo* chứ không
+thực sự cắt ngắn câu trả lời — vì thế `quality_score` giữ nguyên 0.880 ở cả ba kịch bản. Với LLM
+thật, trần output sẽ cắt câu trả lời và đánh đổi chất lượng; panel `quality` trên dashboard chính
+là chỗ để canh đánh đổi đó.
+
+### 8.2 Audit log riêng
+
+[`app/audit.py`](../app/audit.py) ghi `data/audit.jsonl` (đường dẫn từ `AUDIT_LOG_PATH`), tách hẳn
+khỏi log ứng dụng. Lý do tách: log ứng dụng phục vụ gỡ lỗi và bị dọn thường xuyên — chính nhóm đã
+phải xoá `data/logs.jsonl` một lần để lấy baseline sạch. Nếu trộn chung, lần dọn đó đã xoá luôn dấu
+vết ai bật/tắt incident lúc nào.
+
+Sự kiện được ghi: `app.start` (kèm `tracing_enabled`, `max_output_tokens`, trạng thái incident),
+`incident.enable`, `incident.disable`, `config.change`. Mỗi mục có `ts`, `actor` (từ header
+`x-actor`, mặc định `unknown`), `outcome` (`success`/`rejected`), `correlation_id` để nối ngược
+sang log ứng dụng, và `details`. Thao tác bị từ chối cũng được ghi lại chứ không im lặng.
+
+Mọi chuỗi trong `details` đi qua bộ scrub PII trước khi ghi, để audit log không trở thành đường rò
+dữ liệu mới — có test khoá hành vi này trong [`tests/test_audit.py`](../tests/test_audit.py).
+
+### 8.3 Automation — phát hiện anomaly tự động
+
+[`scripts/detect_anomalies.py`](../scripts/detect_anomalies.py) quét `data/logs.jsonl` và báo bốn
+nhóm bất thường: `pii_leak`, `slo_breach`, `log_hygiene`, `traffic_gap`.
+
+Ngưỡng **không hard-code**: đọc thẳng `objective` từ [`config/slo.yaml`](../config/slo.yaml), nên
+detector luôn khớp SLO và alert rules của nhóm; mỗi phát hiện `slo_breach` còn chỉ ra đúng tên alert
+tương ứng trong [`docs/alerts.md`](../docs/alerts.md). Exit code 1 khi có phát hiện mức critical để
+dùng được trong CI hoặc pre-commit.
+
+Hai lựa chọn thiết kế đáng nói:
+
+- **PII quét toàn bộ file, không giới hạn cửa sổ** — một lần rò rỉ đã là rò rỉ, không thể hết hạn.
+- **Bỏ mẫu `address_vn` khỏi bộ quét** vì mẫu đó khớp cả những từ thông thường như "Quận"/"Phường"
+  trong văn bản tiếng Việt bình thường; giữ lại sẽ báo giả liên tục và làm người dùng mất tin vào
+  detector. Chỉ giữ các định danh chặt: email, số điện thoại, CCCD, số thẻ, passport.
+
+Kiểm chứng trên dữ liệu thật — chạy lại chính file log trước khi hoàn thiện Checkpoint 1:
+
+```text
+[CRITICAL] log_hygiene: 70/120 bản ghi API thiếu correlation_id — không nối được trace với log
+[ warning] log_hygiene: 70/120 bản ghi API thiếu enrichment (feature, model, session_id, user_id_hash)
+Tổng: 2 phát hiện, 1 ở mức critical.        exit code = 1
+```
+
+Trên dữ liệu sau khi sửa, detector báo sạch và trả về 0.

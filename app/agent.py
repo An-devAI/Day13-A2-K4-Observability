@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 
@@ -21,10 +22,25 @@ class AgentResult:
     quality_score: float
 
 
+def _configured_output_cap() -> int | None:
+    """Trần output token lấy từ MAX_OUTPUT_TOKENS; bỏ trống hoặc <= 0 nghĩa là không chặn."""
+    raw = os.getenv("MAX_OUTPUT_TOKENS", "").strip()
+    if not raw:
+        return None
+    try:
+        cap = int(raw)
+    except ValueError:
+        return None
+    return cap if cap > 0 else None
+
+
 class LabAgent:
-    def __init__(self, model: str = "claude-sonnet-4-5") -> None:
+    def __init__(self, model: str = "claude-sonnet-4-5", max_output_tokens: int | None = None) -> None:
         self.model = model
         self.llm = FakeLLM(model=model)
+        self.max_output_tokens = (
+            max_output_tokens if max_output_tokens is not None else _configured_output_cap()
+        )
 
     @observe(as_type="generation", capture_input=False, capture_output=False)
     def run(self, user_id: str, feature: str, session_id: str, message: str) -> AgentResult:
@@ -38,7 +54,7 @@ class LabAgent:
             message=message,
             enabled=tracing_enabled(),
         )
-        response = self.llm.generate(prompt.text)
+        response = self.llm.generate(prompt.text, max_output_tokens=self.max_output_tokens)
         quality_score = self._heuristic_quality(message, response.text, docs)
         latency_ms = int((time.perf_counter() - started) * 1000)
         cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
@@ -64,6 +80,7 @@ class LabAgent:
                 "prompt_version": prompt.version,
                 "prompt_source": prompt.source,
                 "prompt_fetch_error": prompt.fetch_error,
+                "max_output_tokens": self.max_output_tokens,
             },
             usage_details={
                 "prompt_tokens": response.usage.input_tokens,

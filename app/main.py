@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from structlog.contextvars import bind_contextvars
 
+from . import audit
 from .agent import LabAgent
 from .incidents import disable, enable, status
 from .logging_config import configure_logging, get_logger
@@ -29,6 +30,14 @@ async def startup() -> None:
         service=os.getenv("APP_NAME", "day13-observability-lab"),
         env=os.getenv("APP_ENV", "dev"),
         payload={"tracing_enabled": tracing_enabled()},
+    )
+    audit.record(
+        audit.APP_START,
+        details={
+            "tracing_enabled": tracing_enabled(),
+            "max_output_tokens": agent.max_output_tokens,
+            "incidents": status(),
+        },
     )
 
 
@@ -96,21 +105,54 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=500, detail=error_type) from exc
 
 
+def _actor(request: Request) -> str:
+    """Ai gọi endpoint. Header x-actor để người chạy tự khai; mặc định là unknown."""
+    return request.headers.get("x-actor", "unknown")
+
+
 @app.post("/incidents/{name}/enable")
-async def enable_incident(name: str) -> JSONResponse:
+async def enable_incident(name: str, request: Request) -> JSONResponse:
     try:
         enable(name)
-        log.warning("incident_enabled", service="control", payload={"name": name})
-        return JSONResponse({"ok": True, "incidents": status()})
     except KeyError as exc:
+        audit.record(
+            audit.INCIDENT_ENABLE,
+            actor=_actor(request),
+            outcome="rejected",
+            correlation_id=request.state.correlation_id,
+            details={"name": name, "reason": "unknown incident"},
+        )
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    log.warning("incident_enabled", service="control", payload={"name": name})
+    audit.record(
+        audit.INCIDENT_ENABLE,
+        actor=_actor(request),
+        correlation_id=request.state.correlation_id,
+        details={"name": name, "incidents_after": status()},
+    )
+    return JSONResponse({"ok": True, "incidents": status()})
 
 
 @app.post("/incidents/{name}/disable")
-async def disable_incident(name: str) -> JSONResponse:
+async def disable_incident(name: str, request: Request) -> JSONResponse:
     try:
         disable(name)
-        log.warning("incident_disabled", service="control", payload={"name": name})
-        return JSONResponse({"ok": True, "incidents": status()})
     except KeyError as exc:
+        audit.record(
+            audit.INCIDENT_DISABLE,
+            actor=_actor(request),
+            outcome="rejected",
+            correlation_id=request.state.correlation_id,
+            details={"name": name, "reason": "unknown incident"},
+        )
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    log.warning("incident_disabled", service="control", payload={"name": name})
+    audit.record(
+        audit.INCIDENT_DISABLE,
+        actor=_actor(request),
+        correlation_id=request.state.correlation_id,
+        details={"name": name, "incidents_after": status()},
+    )
+    return JSONResponse({"ok": True, "incidents": status()})
