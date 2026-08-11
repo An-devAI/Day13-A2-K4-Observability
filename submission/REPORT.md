@@ -6,10 +6,10 @@
 - Repository URL: `https://github.com/An-devAI/Day13-A2-K4-Observability`
 - Commit SHA cuối: cập nhật sau commit cuối cùng của nhóm.
 - Thành viên và vai trò:
-  - Nguyễn Trường An: Logging & Middleware
-  - Nguyễn Hải Yến: Security & Compliance
-  - Phạm Thành Đạt: Metrics & Alerting
-  - Nguyễn Huy Toàn: QA & Incident Analyst
+  - Nguyễn Trường An - 2A202601616: Logging & Middleware
+  - Nguyễn Hải Yến - 2A202601604: Security & Compliance
+  - Phạm Thành Đạt - 2A202601672: Metrics & Alerting
+  - Nguyễn Huy Toàn - 2A202601716: QA & Incident Analyst
 
 ## 2. Kết quả kỹ thuật
 
@@ -123,6 +123,9 @@ Chi tiết và số đo trong phần ghi chú của Alert 1.
 
 Với mỗi thành viên, ghi rõ nhiệm vụ và link commit/PR tương ứng.
 
-| Thành viên            | Phần việc                                                                                                      | Commit/PR            | Điều đã học                                                                                               |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Thành viên D / Role 4 | QA baseline, chạy load test sinh log, kiểm dashboard contract, chạy challenge `rag_slow`, sinh evidence dashboard sạch/challenge và hoàn thiện báo cáo incident | Commit cuối của nhóm sau khi nộp | Biết cách nối Metrics -> Traces -> Logs để chứng minh root cause thay vì chỉ nhìn một log riêng lẻ |
+| Thành viên | Phần việc | Commit/PR | Điều đã học |
+|---|---|---|---|
+| Nguyễn Trường An - 2A202601616 | Logging & Middleware: hoàn thiện middleware correlation ID, gắn metadata vào log API và đảm bảo request/response có thể đối chiếu bằng cùng một correlation ID | `ef4ca98`, `708c03c` | Hiểu vai trò của correlation ID trong việc nối request, trace và log khi điều tra sự cố |
+| Nguyễn Hải Yến - 2A202601604 | Security & Compliance: hoàn thiện che PII, kiểm tra email/số điện thoại/số thẻ không xuất hiện nguyên văn trong log, tạo evidence prompt versioning trên Langfuse | `5a4f81b` | Biết cần scrub PII trước khi ghi log và dùng prompt label/version để rollback có kiểm soát |
+| Phạm Thành Đạt - 2A202601672 | Metrics & Alerting: hoàn thiện metrics snapshot, dashboard 6 panel, SLO, alert rules, runbook và dashboard evidence baseline/incident | `e26316c`, `b4d0482` | Biết thiết kế alert theo triệu chứng người dùng và dùng SLO/error budget để ưu tiên xử lý |
+| Nguyễn Huy Toàn - 2A202601716 | QA & Incident Analyst: chạy baseline/load test, kiểm `validate_logs.py` và `validate_dashboard.py`, chạy challenge `rag_slow`, đối chiếu Metrics -> Traces -> Logs, sinh evidence Role 4 và hoàn thiện báo cáo incident | Commit `adf1e91` | Biết cách nối Metrics -> Traces -> Logs để chứng minh root cause thay vì chỉ nhìn một log riêng lẻ |

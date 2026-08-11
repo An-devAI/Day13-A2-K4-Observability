@@ -142,8 +142,11 @@ python scripts/validate_logs.py
 python scripts/validate_dashboard.py
 ```
 
-Evidence still needed later:
+Evidence completed later:
 
-- Final trace ID from Langfuse for the slow challenge request with correlation ID `req-864934b7`.
-- Optional screenshot of `submission/evidence/role4_challenge_dashboard.html`.
-- Final commit/PR link for Role 4 contribution.
+- Challenge trace screenshot: `submission/evidence/trace_challenge_k4_s03.png`.
+- Challenge trace ID: `d19a84a4aa3b6262f18d96dea00143a4`.
+- Challenge log correlation ID used for trace/log matching: `req-49ef5c5a`.
+- Challenge dashboard evidence: `submission/evidence/role4_challenge_dashboard.html`.
+- Clean validator dashboard evidence: `submission/evidence/role4_clean_dashboard.html`.
+- Role 4 commit: `adf1e91`.
