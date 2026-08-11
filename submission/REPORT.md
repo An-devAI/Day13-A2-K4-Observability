@@ -4,7 +4,7 @@
 
 - Tên nhóm: A2
 - Repository URL: `https://github.com/An-devAI/Day13-A2-K4-Observability`
-- Commit SHA cuối: cập nhật sau commit cuối cùng của nhóm.
+- Commit SHA cuối: `773251ba9b86b239116698cbf7bca43190b94f5f`.
 - Thành viên và vai trò:
   - Nguyễn Trường An - 2A202601616: Logging & Middleware
   - Nguyễn Hải Yến - 2A202601604: Security & Compliance
